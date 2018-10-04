@@ -12,7 +12,7 @@ Beware: This is for renewal. For initial installation, the steps in https://help
 """
 
 DOMAIN_NAMES = []  # FILL THIS IN
-DAYS_BEFORE_RENEWAL = 3
+DAYS_BEFORE_EXPIRE = 3
 
 LBL = "[PA-SSL-RENEWAL]"
 
@@ -54,7 +54,7 @@ def install_new_certificate(domain_name: str):
 if __name__ == "__main__":
 
     for domain in DOMAIN_NAMES:
-        if certificate_expires_soon(domain, in_days=DAYS_BEFORE_RENEWAL):
+        if certificate_expires_soon(domain, in_days=DAYS_BEFORE_EXPIRE):
             generate_new_certificate(domain)
             install_new_certificate(domain)
         else:
