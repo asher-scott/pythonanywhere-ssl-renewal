@@ -1,61 +1,61 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 import datetime
 import os
-import smtplib
 import subprocess
 
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+"""
+This script can be run to renew several LetsEncrypt SSL certificates on PythonAnywhere.
+For configuration, all we need is to configure the domain names.
+
+Beware: This is for renewal. For initial installation, the steps in https://help.pythonanywhere.com/pages/LetsEncrypt/
+        should be followed for each domain, so that everything (PA scripts, certificate directories) is where expected.
+"""
+
+DOMAIN_NAMES = []  # FILL THIS IN
+DAYS_BEFORE_EXPIRE = 3
+
+LBL = "[PA-SSL-RENEWAL]"
 
 
-CONFIG = {
-    "SMTP_SERVER": "",
-    "SMTP_USERNAME": "",
-    "SMTP_PASSWORD": "",
-    "SENDER_EMAIL_ADDRESS": "",
-    "RECIEVER_EMAIL_ADDRESS": "",
-    "PYTHONANYWHERE_USERNAME": "",
-    "CERTIFICATE_DIR": "",
-    "DOMAIN_NAME": ""
-}
-
-
-def certificate_expired():
-    date_parts = subprocess.check_output("openssl x509 -enddate -noout -in ~/letsencrypt/{}/cert.pem".format(CONFIG['DOMAIN_NAME']), shell=True).strip("notAfter=").split(" ") 
-    date_string = date_parts[1]+date_parts[0]+date_parts[3]
+def certificate_expires_soon(domain_name: str, in_days=3):
+    date_parts = (
+        subprocess.check_output(
+            "openssl x509 -enddate -noout -in ~/letsencrypt/{}/cert.pem".format(
+                domain_name
+            ),
+            shell=True,
+            universal_newlines=True,
+        )
+        .replace("notAfter=", "")
+        .split()
+    )
+    date_string = date_parts[1] + date_parts[0] + date_parts[3]
     expire_date = datetime.datetime.strptime(date_string, "%d%b%Y")
 
-    if(datetime.datetime.now() + datetime.timedelta(days=3) > expire_date):
+    if datetime.datetime.now() + datetime.timedelta(days=in_days) > expire_date:
+        print("%s Certificate for %s expires soon (%s)" % (LBL, domain_name, expire_date))
         return True
     return False
 
 
-def generate_new_certificate():
-    os.system("~/dehydrated/dehydrated --cron --config ~/letsencrypt/config --domain {} --out ~/letsencrypt --challenge http-01 ".format(CONFIG['DOMAIN_NAME']))
+def generate_new_certificate(domain_name: str):
+    print("%s Generating certificate for  %s ..." % (LBL, domain_name))
+    os.system(
+        "~/dehydrated/dehydrated --cron --config ~/letsencrypt/config"
+        " --domain {} --out ~/letsencrypt --challenge http-01 ".format(domain_name)
+    )
 
 
-def send_renewal_email():
-    body = """
-    Username: {}
-    Certificate Directory: {}
-    Domain Name: {}
-    
-    Thank you!""".format(CONFIG['PYTHONANYWHERE_USERNAME'], CONFIG['CERTIFICATE_DIR'], CONFIG['DOMAIN_NAME'])
-
-    email = MIMEMultipart()
-    email['Subject'] = 'SSL Certificate Renewal'
-    email.attach(MIMEText(body, 'plain'))
-
-    smtp = smtplib.SMTP(CONFIG['SMTP_SERVER'], 587)
-    smtp.ehlo()
-    smtp.starttls()
-    smtp.login(CONFIG['SMTP_USERNAME'],CONFIG['SMTP_PASSWORD'])
-    smtp.sendmail(CONFIG['SENDER_EMAIL_ADDRESS'], CONFIG['RECIEVER_EMAIL_ADDRESS'], email.as_string())
-    smtp.quit()
+def install_new_certificate(domain_name: str):
+    print("%s Installing certificate for  %s ..." % (LBL, domain_name))
+    os.system("pa_install_webapp_letsencrypt_ssl.py {}".format(domain_name))
 
 
-if certificate_expired():
-    generate_new_certificate()
-    send_renewal_email()
-else:
-    print("Current certificates are up to date!")
+if __name__ == "__main__":
+
+    for domain in DOMAIN_NAMES:
+        if certificate_expires_soon(domain, in_days=DAYS_BEFORE_EXPIRE):
+            generate_new_certificate(domain)
+            install_new_certificate(domain)
+        else:
+            print("%s Current certificate for %s is up to date!" % (LBL, domain))
